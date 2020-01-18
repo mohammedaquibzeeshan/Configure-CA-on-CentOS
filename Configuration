@@ -1,0 +1,304 @@
+System Specification:
+In this article, we are using three virtual machines with following specifications:
+
+Hostname:	ca-01.example.com	web-01.example.com	client-01.example.com
+IP Address:	192.168.116.54 /24	192.168.116.51 /24	192.168.116.52 /24
+Operating System:	CentOS 7.6	CentOS 7.6	CentOS 7.6
+Purpose:	CA Server	Apache HTTP Server	Client System
+ 
+
+Configuring a Certificate Authority (CA) in CentOS 7:
+Connect to the ca-01.example.com as root user by using an ssh tool like PuTTY.
+
+Openssl package provides the necessary commands to create SSL certificates and keys.
+
+Openssl package is by default installed on even a minimally installed CentOS 7. However, if it isn't installed already, you must install it from yum repository.
+
+[root@ca-01 ~]# yum install -y openssl
+Loaded plugins: fastestmirror
+Loading mirror speeds from cached hostfile
+ * base: mirrors.ges.net.pk
+ * epel: mirror1.ku.ac.th
+ * extras: mirrors.ges.net.pk
+ * updates: mirrors.ges.net.pk
+Package 1:openssl-1.0.2k-16.el7.x86_64 already installed and latest version
+Nothing to do
+
+Openssl is already installed on this server.
+
+For implementing public encryption, first of all, we need a private key that is later used to generate a CA certificate.
+
+[root@ca-01 ~]# cd /etc/pki/CA/private/
+[root@ca-01 private]# openssl genrsa -aes128 -out ourCA.key 2048
+Generating RSA private key, 2048 bit long modulus
+.................................................................+++
+..............+++
+e is 65537 (0x10001)
+Enter pass phrase for ourCA.key:
+Verifying - Enter pass phrase for ourCA.key:
+
+Here, we have generated a private key using RSA algorithm with a relatively larger key size of 2048-bits for improved security.
+
+Although, we can generate a private key without a pass phrase. But, it is strongly recommended that you should set a pass phrase while generating private keys. It increases the security during transfer or backup of the private keys.
+
+Now create a Certificate Authority (CA) certificate using the ourCA.key.
+
+[root@ca-01 private]# openssl req -new -x509 -days 1825 \
+> -key /etc/pki/CA/private/ourCA.key \
+> -out /etc/pki/CA/certs/ourCA.crt
+Enter pass phrase for /etc/pki/CA/private/ourCA.key:
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [XX]:PK
+State or Province Name (full name) []:Sindh
+Locality Name (eg, city) [Default City]:Karachi
+Organization Name (eg, company) [Default Company Ltd]:Ahmer's SysAdmin Recipes
+Organizational Unit Name (eg, section) []:ITLAB
+Common Name (eg, your name or your server's hostname) []:ca-01.example.com
+Email Address []:ahmer@example.com
+
+Our Certificate Authority (CA) server is ready now.
+
+ 
+
+Configuring Apache HTTP Server to use SSL Certificates:
+Connect to web-01.example.com using ssh.
+
+We have already configured the Apache HTTP Server on web-01.example.com. But it is running on HTTP protocol.
+
+configure-ca-in-centos-7-web-01-home-page
+
+Our objective is to convert this website from HTTP to HTTPS. For this purpose, we need mod_ssl module for Apache. Therefore, we are installing it from yum repository.
+
+[root@web-01 ~]# yum install -y mod_ssl
+Loaded plugins: fastestmirror
+Loading mirror speeds from cached hostfile
+ * base: mirrors.ges.net.pk
+ * extras: mirrors.ges.net.pk
+ * updates: mirrors.ges.net.pk
+Resolving Dependencies
+--> Running transaction check
+---> Package mod_ssl.x86_64 1:2.4.6-88.el7.centos will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+================================================================================
+ Package        Arch          Version                         Repository   Size
+================================================================================
+Installing:
+ mod_ssl        x86_64        1:2.4.6-88.el7.centos           base        112 k
+
+Transaction Summary
+================================================================================
+Install  1 Package
+
+Total download size: 112 k
+Installed size: 224 k
+Downloading packages:
+mod_ssl-2.4.6-88.el7.centos.x86_64.rpm                     | 112 kB   00:02
+Running transaction check
+Running transaction test
+Transaction test succeeded
+Running transaction
+  Installing : 1:mod_ssl-2.4.6-88.el7.centos.x86_64                         1/1
+  Verifying  : 1:mod_ssl-2.4.6-88.el7.centos.x86_64                         1/1
+
+Installed:
+  mod_ssl.x86_64 1:2.4.6-88.el7.centos
+
+Complete!
+
+During installation mod_ssl created a default configuration file ssl.conf at /etc/httpd/conf.d directory.
+
+We can amend ssl.conf to add the SSL certificates for the website. But first we have to acquire a SSL Certificate for our website.
+
+Make sure openssl is installed on this server, because we require it to generate private key and CSR (Certificate Signing Request).
+
+Generate a private key for the server web-01.example.com.
+
+[root@web-01 ~]# openssl genrsa -out /etc/pki/tls/private/web-01.key 1024
+Generating RSA private key, 1024 bit long modulus
+..................................................................................................++++++
+..++++++
+e is 65537 (0x10001)
+
+We have generated a private key with RSA key algorithm with key size of 1024.
+
+This time we are not protecting our private key with a pass phrase, because if we set a pass phrase then whenever we start httpd.service will ask for this pass phrase.
+
+Now, generate a CSR (Certificate Signing Request) for our website.
+
+[root@web-01 ~]# openssl req -new -key /etc/pki/tls/private/web-01.key \
+> -out /etc/pki/tls/web-01.csr
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [XX]:PK
+State or Province Name (full name) []:Sindh
+Locality Name (eg, city) [Default City]:Karachi
+Organization Name (eg, company) [Default Company Ltd]:Ahmer's SysAdmin Recipes
+Organizational Unit Name (eg, section) []:ITLAB
+Common Name (eg, your name or your server's hostname) []:web-01.example.com
+Email Address []:ahmer@example.com
+
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:
+
+We have generated a CSR. Now we send it to CA for digital signature.
+
+[root@web-01 ~]# scp /etc/pki/tls/web-01.csr root@ca-01:~/web-01.csr
+root@ca-01's password:
+web-01.csr                                    100%  729   353.1KB/s   00:00
+
+Connect to ca-01.example.com and digitally signed that CSR.
+
+[root@ca-01 ~]# openssl x509 -req -in web-01.csr \
+> -CA /etc/pki/CA/certs/ourCA.crt \
+> -CAkey /etc/pki/CA/private/ourCA.key \
+> -CAcreateserial \
+> -out web-01.crt \
+> -days 365
+Signature ok
+subject=/C=PK/ST=Sindh/L=Karachi/O=Ahmer's SysAdmin Recipes/OU=ITLAB/CN=web-01.example.com/emailAddress=ahmer@example.com
+Getting CA Private Key
+Enter pass phrase for /etc/pki/CA/private/ourCA.key:
+
+Our CSR has been digitally signed by our Certificate Authority (CA).
+
+Transfer web-01.crt to web-01.example.com.
+
+[root@ca-01 ~]# scp web-01.crt root@web-01:/etc/pki/tls/certs/web-01.crt
+root@web-01's password:
+web-01.crt                                    100% 1180     1.0MB/s   00:00
+
+Connect to web-01.example.com using ssh as root user.
+
+Now, we have a digitally signed SSL certificate. Add this certificate and private key in ssl.conf file.
+
+[root@web-01 ~]# vi /etc/httpd/conf.d/ssl.conf
+
+we only required to update following two directives therein.
+
+SSLCertificateFile /etc/pki/tls/certs/web-01.crt
+SSLCertificateKeyFile /etc/pki/tls/private/web-01.key
+
+Restart Apache service.
+
+[root@web-01 ~]# systemctl restart httpd.service
+
+Allow https service in Linux firewall.
+
+[root@web-01 ~]# firewall-cmd --permanent --add-service=https
+success
+[root@web-01 ~]# firewall-cmd --reload
+success
+
+We have successfully configured our Apache server to use HTTPS protocol.
+
+ 
+
+Add CA Certificate to CentOS 7 clients’ Trusted Store:
+Connect to client-01.example.com using ssh as root user.
+
+Install elinks browser using yum repository.
+
+[root@client-01 ~]# yum install -y elinks
+Loaded plugins: fastestmirror
+Loading mirror speeds from cached hostfile
+ * base: mirrors.ges.net.pk
+ * extras: mirrors.ges.net.pk
+ * updates: mirrors.ges.net.pk
+Resolving Dependencies
+--> Running transaction check
+---> Package elinks.x86_64 0:0.12-0.37.pre6.el7.0.1 will be installed
+--> Processing Dependency: libnss_compat_ossl.so.0()(64bit) for package: elinks-0.12-0.37.pre6.el7.0.1.x86_64
+--> Processing Dependency: libmozjs185.so.1.0()(64bit) for package: elinks-0.12-0.37.pre6.el7.0.1.x86_64
+--> Processing Dependency: libgpm.so.2()(64bit) for package: elinks-0.12-0.37.pre6.el7.0.1.x86_64
+--> Running transaction check
+---> Package gpm-libs.x86_64 0:1.20.7-5.el7 will be installed
+---> Package js.x86_64 1:1.8.5-20.el7 will be installed
+---> Package nss_compat_ossl.x86_64 0:0.9.6-8.el7 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+================================================================================
+ Package             Arch       Version                       Repository   Size
+================================================================================
+Installing:
+ elinks              x86_64     0.12-0.37.pre6.el7.0.1        updates     882 k
+Installing for dependencies:
+ gpm-libs            x86_64     1.20.7-5.el7                  base         32 k
+ js                  x86_64     1:1.8.5-20.el7                base        2.3 M
+ nss_compat_ossl     x86_64     0.9.6-8.el7                   base         37 k
+
+Transaction Summary
+================================================================================
+Install  1 Package (+3 Dependent packages)
+
+Total download size: 3.2 M
+Installed size: 9.6 M
+Downloading packages:
+(1/4): gpm-libs-1.20.7-5.el7.x86_64.rpm                    |  32 kB   00:02
+(2/4): nss_compat_ossl-0.9.6-8.el7.x86_64.rpm              |  37 kB   00:02
+(3/4): elinks-0.12-0.37.pre6.el7.0.1.x86_64.rpm            | 882 kB   00:21
+(4/4): js-1.8.5-20.el7.x86_64.rpm                          | 2.3 MB   00:55
+--------------------------------------------------------------------------------
+Total                                               60 kB/s | 3.2 MB  00:55
+Running transaction check
+Running transaction test
+Transaction test succeeded
+Running transaction
+  Installing : nss_compat_ossl-0.9.6-8.el7.x86_64                           1/4
+  Installing : 1:js-1.8.5-20.el7.x86_64                                     2/4
+  Installing : gpm-libs-1.20.7-5.el7.x86_64                                 3/4
+  Installing : elinks-0.12-0.37.pre6.el7.0.1.x86_64                         4/4
+  Verifying  : elinks-0.12-0.37.pre6.el7.0.1.x86_64                         1/4
+  Verifying  : gpm-libs-1.20.7-5.el7.x86_64                                 2/4
+  Verifying  : 1:js-1.8.5-20.el7.x86_64                                     3/4
+  Verifying  : nss_compat_ossl-0.9.6-8.el7.x86_64                           4/4
+
+Installed:
+  elinks.x86_64 0:0.12-0.37.pre6.el7.0.1
+
+Dependency Installed:
+  gpm-libs.x86_64 0:1.20.7-5.el7               js.x86_64 1:1.8.5-20.el7
+  nss_compat_ossl.x86_64 0:0.9.6-8.el7
+
+Complete!
+
+Browser URL https://web-01.example.com using elinks.
+
+configure-ca-in-centos-7-elinks-ssl-error
+
+Don't worry, we haven't misconfigured anything. Actually this SSL error is thrown because our CA is not included in local ca-trust store of client-01.example.com.
+
+Install CA certificate by adding it to local ca-trust store. But first, we acquire the CA certificate from ca-01.example.com.
+
+[root@client-01 ~]# cd /etc/pki/ca-trust/source/anchors/
+[root@client-01 anchors]# scp root@ca-01:/etc/pki/CA/certs/ourCA.crt .
+root@ca-01's password:
+ourCA.crt                                     100% 1476   684.7KB/s   00:00
+
+Now, use the following command to add ourCA.crt to local ca-trust store.
+
+[root@client-01 anchors]# update-ca-trust
+
+Browse URL https://web-01.example.com again.
+
+configure-ca-in-centos-7-elinks-web-01-homepage
+
+We have successfully configured a Certificate Authority (CA) on CentOS 7 server.
+
